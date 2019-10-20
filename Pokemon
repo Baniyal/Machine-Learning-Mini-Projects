@@ -1,0 +1,85 @@
+import numpy as np
+import pandas as pd
+
+dataset = pd.read_csv("Pokemon.csv")
+
+dataset["Type 2"].fillna(value = "None",inplace = True)
+#replace Nan values in a given column
+
+#pandas.Series.value_counts returns object conatining counts of unique values
+    
+dataset["Type 1"].value_counts().plot.bar()
+# represent how many each primary type are there
+dataset["Type 2"].value_counts().plot.bar()
+# represent those pokemons having a type 2 attribute as well
+dataset["Legendary"].value_counts().plot.bar()
+# to see how many of the pokemons are actually legendary
+
+
+from sklearn.model_selection import train_test_split
+legendary_pokemon = dataset.loc[dataset["Legendary"] == True]
+normal_pokemon = dataset.loc[dataset["Legendary"]==False]
+
+# we will use the pokemon battle stats + types to determine whether it is legendary or not
+
+legendary_pokemon = legendary_pokemon[['Type 1','Type 2','Total','HP','Attack','Defense','Sp. Atk','Sp. Def','Speed','Legendary']]
+normal_pokemon = normal_pokemon[['Type 1','Type 2','Total','HP','Attack','Defense','Sp. Atk','Sp. Def','Speed','Legendary']]
+
+#now we will randomly sample random non-legendary pokemon from the data set to balance our dataset 
+sampleNormalPokemon = normal_pokemon.sample(100)
+#.sample provides a random sample for the values
+
+x = pd.concat([legendary_pokemon,sampleNormalPokemon])
+# we add list of normal pokemons onto the list of the legendary pokemons
+x = pd.get_dummies(x)
+#take last column as training labels and drop it from the training data
+y = x["Legendary"]
+x = x.drop("Legendary", 1)
+
+testNormalPokemon = pd.get_dummies(normal_pokemon)
+
+X_train , X_test , y_train , y_test = train_test_split(x,y,random_state  = 47 , test_size = 0.30)
+# now that we have split our train, test data. Let's increase the amount of Legendary pokemon in our training data, 
+# by creating synthetic examples using the SMOTE algorithm
+from imblearn.over_sampling import SMOTE
+
+# sampling ration of 1.0 will equally balance the binary classes
+sm = SMOTE(random_state=15,sampling_strategy= 1.0)
+X_train_res, y_train_res = sm.fit_sample(X_train, y_train)
+
+
+
+from sklearn.ensemble import RandomForestClassifier 
+model = RandomForestClassifier(n_estimators = 100 , max_depth = 7)
+model.fit(X_train_res , y_train_res)
+
+y_pred = model.predict(X_test)
+
+
+#Importing the accuracy metric from sklearn.metrics library
+
+from sklearn.metrics import accuracy_score
+print('Accuracy Score on train data: ', accuracy_score(y_true=y_train_res, y_pred=model.predict(X_train_res)))
+print('Accuracy Score on test data: ', accuracy_score(y_true=y_test, y_pred=y_pred))
+
+# feature importance
+importances = pd.DataFrame({'feature':X_train.columns,'importance':np.round(model.feature_importances_,3)})
+importances = importances.sort_values('importance',ascending=False).set_index('feature')
+importances.head(10)
+
+
+plot = importances.plot.pie(y='importance', figsize=(10, 10))
+
+
+import sklearn.tree 
+import graphviz 
+
+# Extract single tree
+estimator = model.estimators_[4]
+
+dot_data = dot_data = sklearn.tree.export_graphviz(estimator, out_file=None, 
+               feature_names=x.columns,  
+                class_names=['normal','legendary'] , filled=True, rounded=True,  special_characters=True)  
+graph = graphviz.Source(dot_data) 
+
+graph
